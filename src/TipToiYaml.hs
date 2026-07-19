@@ -31,6 +31,8 @@ import Data.Time (getCurrentTime, formatTime)
 import Data.Yaml hiding ((.=), Parser)
 import Data.Yaml.Pretty
 import Data.Aeson.Types hiding ((.=), Parser, (<?>))
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KM
 import Text.Parsec hiding (Line, lookAhead, spaces)
 import Text.Parsec.String
 import qualified Text.Parsec as P
@@ -117,16 +119,37 @@ instance ToJSON a => ToJSON (OptArray a) where
 type PlayListListYaml = OptArray String
 
 type OIDListYaml = String
+type OIDYaml = String
+
+-- The yaml "tag" of a game is the single type discriminator. The structural
+-- variants use their constructor's tag (bonusstage, gameselect, ...); the
+-- known types of the common layout get one tag each (below); and a common-
+-- layout game with an unidentified type number is written as "standard" with
+-- an explicit gametype field.
+commonTypeTags :: [(Word16, String)]
+commonTypeTags =
+    [ (1,  "standard1")      -- generic engine; differences to 3 and 5 unidentified
+    , (2,  "hintchain")      -- generic engine, hints play in listed order
+    , (3,  "standard3")
+    , (4,  "memory")         -- memory-sequence game
+    , (5,  "standard5")
+    , (40, "memorynorepeat") -- memory-sequence game with no-repeat draw
+    ]
+
+structuralTags :: [String]
+structuralTags =
+    [ "bonusstage", "subgamegroups", "gameselect", "productspecific"
+    , "endless", "subgameselect", "placeholder" ]
 
 data GameYaml = CommonGameYaml
         { gyGameType                 :: Word16
         , gyRounds                   :: Word16
-        , gyUnknownC                 :: Word16
+        , gyAllNeeded                :: Bool
         , gyEarlyRounds              :: Word16
-        , gyRepeatLastMedia          :: Word16
-        , gyUnknownX                 :: Word16
-        , gyUnknownW                 :: Word16
-        , gyUnknownV                 :: Word16
+        , gyRepeatOID                :: OIDYaml
+        , gyTuningX                  :: Maybe Word16
+        , gyTuningW                  :: Maybe Word16
+        , gyTuningV                  :: Maybe Word16
         , gyStartPlayList            :: PlayListListYaml
         , gyRoundEndPlayList         :: PlayListListYaml
         , gyFinishPlayList           :: PlayListListYaml
@@ -141,13 +164,13 @@ data GameYaml = CommonGameYaml
         , gyBonusSubgameCount        :: Word16
         , gyBonusRounds              :: Word16
         , gyBonusTarget              :: Word16
-        , gyUnknownI                 :: Word16
+        , gyAllNeeded                :: Bool
         , gyEarlyRounds              :: Word16
-        , gyUnknownQ                 :: Word16
-        , gyRepeatLastMedia          :: Word16
-        , gyUnknownX                 :: Word16
-        , gyUnknownW                 :: Word16
-        , gyUnknownV                 :: Word16
+        , gyBonusEarlyRounds         :: Word16
+        , gyRepeatOID                :: OIDYaml
+        , gyTuningX                  :: Maybe Word16
+        , gyTuningW                  :: Maybe Word16
+        , gyTuningV                  :: Maybe Word16
         , gyStartPlayList            :: PlayListListYaml
         , gyRoundEndPlayList         :: PlayListListYaml
         , gyFinishPlayList           :: PlayListListYaml
@@ -164,12 +187,12 @@ data GameYaml = CommonGameYaml
         }
     | Game7Yaml
         { gyRounds                   :: Word16
-        , gyUnknownC                 :: Word16
+        , gyAllNeeded                :: Bool
         , gyEarlyRounds              :: Word16
-        , gyRepeatLastMedia          :: Word16
-        , gyUnknownX                 :: Word16
-        , gyUnknownW                 :: Word16
-        , gyUnknownV                 :: Word16
+        , gyRepeatOID                :: OIDYaml
+        , gyTuningX                  :: Maybe Word16
+        , gyTuningW                  :: Maybe Word16
+        , gyTuningV                  :: Maybe Word16
         , gyStartPlayList            :: PlayListListYaml
         , gyRoundEndPlayList         :: PlayListListYaml
         , gyFinishPlayList           :: PlayListListYaml
@@ -182,12 +205,12 @@ data GameYaml = CommonGameYaml
         }
     | Game8Yaml
         { gyRounds                   :: Word16
-        , gyUnknownC                 :: Word16
+        , gyAllNeeded                :: Bool
         , gyEarlyRounds              :: Word16
-        , gyRepeatLastMedia          :: Word16
-        , gyUnknownX                 :: Word16
-        , gyUnknownW                 :: Word16
-        , gyUnknownV                 :: Word16
+        , gyRepeatOID                :: OIDYaml
+        , gyTuningX                  :: Maybe Word16
+        , gyTuningW                  :: Maybe Word16
+        , gyTuningV                  :: Maybe Word16
         , gyStartPlayList            :: PlayListListYaml
         , gyRoundEndPlayList         :: PlayListListYaml
         , gyFinishPlayList           :: PlayListListYaml
@@ -203,12 +226,12 @@ data GameYaml = CommonGameYaml
         }
     | Game9Yaml
         { gyRounds                   :: Word16
-        , gyUnknownC                 :: Word16
+        , gyAllNeeded                :: Bool
         , gyEarlyRounds              :: Word16
-        , gyRepeatLastMedia          :: Word16
-        , gyUnknownX                 :: Word16
-        , gyUnknownW                 :: Word16
-        , gyUnknownV                 :: Word16
+        , gyRepeatOID                :: OIDYaml
+        , gyTuningX                  :: Maybe Word16
+        , gyTuningW                  :: Maybe Word16
+        , gyTuningV                  :: Maybe Word16
         , gyStartPlayList            :: PlayListListYaml
         , gyRoundEndPlayList         :: PlayListListYaml
         , gyFinishPlayList           :: PlayListListYaml
@@ -221,12 +244,12 @@ data GameYaml = CommonGameYaml
         }
     | Game10Yaml
         { gyRounds                   :: Word16
-        , gyUnknownC                 :: Word16
+        , gyAllNeeded                :: Bool
         , gyEarlyRounds              :: Word16
-        , gyRepeatLastMedia          :: Word16
-        , gyUnknownX                 :: Word16
-        , gyUnknownW                 :: Word16
-        , gyUnknownV                 :: Word16
+        , gyRepeatOID                :: OIDYaml
+        , gyTuningX                  :: Maybe Word16
+        , gyTuningW                  :: Maybe Word16
+        , gyTuningV                  :: Maybe Word16
         , gyStartPlayList            :: PlayListListYaml
         , gyRoundEndPlayList         :: PlayListListYaml
         , gyFinishPlayList           :: PlayListListYaml
@@ -239,12 +262,12 @@ data GameYaml = CommonGameYaml
         }
     | Game16Yaml
         { gyRounds                   :: Word16
-        , gyUnknownC                 :: Word16
+        , gyAllNeeded                :: Bool
         , gyEarlyRounds              :: Word16
-        , gyRepeatLastMedia          :: Word16
-        , gyUnknownX                 :: Word16
-        , gyUnknownW                 :: Word16
-        , gyUnknownV                 :: Word16
+        , gyRepeatOID                :: OIDYaml
+        , gyTuningX                  :: Maybe Word16
+        , gyTuningW                  :: Maybe Word16
+        , gyTuningV                  :: Maybe Word16
         , gyStartPlayList            :: PlayListListYaml
         , gyRoundEndPlayList         :: PlayListListYaml
         , gyFinishPlayList           :: PlayListListYaml
@@ -259,21 +282,58 @@ data GameYaml = CommonGameYaml
     | Game253Yaml
     deriving Generic
 
+-- The nine playlistlists of a subgame have fixed roles (see GME-Format.md); they
+-- are exposed as named YAML fields. The ninth is never read by the pen and is
+-- only present (as unusedplaylist) when non-empty.
 data SubGameYaml = SubGameYaml
-    { sgUnknown :: String
-    , sgOids1 :: OIDListYaml
-    , sgOids2 :: OIDListYaml
-    , sgOids3 :: OIDListYaml
-    , sgPlaylist :: [PlayListListYaml]
+    { sgHeader :: String
+    , sgTargetOids :: OIDListYaml
+    , sgDecoyOids :: OIDListYaml
+    , sgAllOids :: OIDListYaml
+    , sgAnnounce :: PlayListListYaml
+    , sgCorrect :: PlayListListYaml
+    , sgWrong :: PlayListListYaml
+    , sgNotInGame :: PlayListListYaml
+    , sgAlreadyFound :: PlayListListYaml
+    , sgHints :: PlayListListYaml
+    , sgRoundComplete :: PlayListListYaml
+    , sgSolution :: PlayListListYaml
+    , sgUnusedPlaylist :: Maybe PlayListListYaml
     }
     deriving Generic
 
 
 instance FromJSON GameYaml where
-    parseJSON = genericParseJSON gameYamlOptions
+    parseJSON (Object o)
+        | Just (String tag) <- KM.lookup (Key.fromString "tag") o
+        , let tag' = T.unpack tag
+        = case lookup tag' [ (t, n) | (n, t) <- commonTypeTags ] of
+            Just n
+                | KM.member (Key.fromString "gametype") o -> fail $ printf
+                    "The game tag \"%s\" already determines the game type; leave out the gametype field." tag'
+                | otherwise -> generic (KM.insert (Key.fromString "gametype") (toJSON n) (retag "common" o))
+            Nothing
+                | tag' == "standard" ->
+                    if KM.member (Key.fromString "gametype") o
+                    then generic (retag "common" o)
+                    else fail "A \"standard\" game needs an explicit gametype field."
+                | tag' `elem` structuralTags -> generic o
+                | otherwise -> fail $ printf "Unknown game tag \"%s\" (known: %s)"
+                    tag' (intercalate ", " (map snd commonTypeTags ++ ["standard"] ++ structuralTags))
+      where
+        retag t = KM.insert (Key.fromString "tag") (String (T.pack t))
+        generic = genericParseJSON gameYamlOptions . Object
+    -- e.g. the plain string "placeholder" for the nullary variant
+    parseJSON v = genericParseJSON gameYamlOptions v
+
 instance ToJSON GameYaml where
-    toJSON = genericToJSON gameYamlOptions
-    toEncoding = genericToEncoding gameYamlOptions
+    toJSON g = case (g, genericToJSON gameYamlOptions g) of
+        (CommonGameYaml { gyGameType = n }, Object o) -> Object $
+            case lookup n commonTypeTags of
+                Just t  -> KM.insert (Key.fromString "tag") (String (T.pack t))
+                               (KM.delete (Key.fromString "gametype") o)
+                Nothing -> KM.insert (Key.fromString "tag") (String (T.pack "standard")) o
+        (_, v) -> v
 instance FromJSON SubGameYaml where
     parseJSON = genericParseJSON gameYamlOptions
 instance ToJSON SubGameYaml where
@@ -333,24 +393,36 @@ oidList2Yaml :: [OID] -> OIDListYaml
 oidList2Yaml = unwords . map show
 
 subGame2Yaml :: SubGame -> SubGameYaml
-subGame2Yaml (SubGame u o1 o2 o3 pl) = SubGameYaml
-    { sgUnknown = prettyHex u
-    , sgOids1 = oidList2Yaml o1
-    , sgOids2 = oidList2Yaml o2
-    , sgOids3 = oidList2Yaml o3
-    , sgPlaylist = map playListList2Yaml pl
-    }
+-- The ninth playlistlist is never read by the pen; it is exposed only when
+-- non-empty (as unusedplaylist), which some products do have.
+subGame2Yaml (SubGame u o1 o2 o3 pl) = case pl of
+    [a, c, w, n, f, h, r, s, u9] -> SubGameYaml
+        { sgHeader = prettyHex u
+        , sgTargetOids = oidList2Yaml o1
+        , sgDecoyOids = oidList2Yaml o2
+        , sgAllOids = oidList2Yaml o3
+        , sgAnnounce = playListList2Yaml a
+        , sgCorrect = playListList2Yaml c
+        , sgWrong = playListList2Yaml w
+        , sgNotInGame = playListList2Yaml n
+        , sgAlreadyFound = playListList2Yaml f
+        , sgHints = playListList2Yaml h
+        , sgRoundComplete = playListList2Yaml r
+        , sgSolution = playListList2Yaml s
+        , sgUnusedPlaylist = if null u9 then Nothing else Just (playListList2Yaml u9)
+        }
+    pls -> error $ printf "subGame2Yaml: expected 9 playlists, got %d" (length pls)
 
 game2gameYaml :: Game -> GameYaml
 game2gameYaml CommonGame {..} = CommonGameYaml
         { gyGameType                 = gGameType
         , gyRounds                   = gRounds
-        , gyUnknownC                 = gUnknownC
+        , gyAllNeeded                = gAllNeeded /= 0
         , gyEarlyRounds              = gEarlyRounds
-        , gyRepeatLastMedia          = gRepeatLastMedia
-        , gyUnknownX                 = gUnknownX
-        , gyUnknownW                 = gUnknownW
-        , gyUnknownV                 = gUnknownV
+        , gyRepeatOID                = show gRepeatOID
+        , gyTuningX                  = maybeZero gTuningX
+        , gyTuningW                  = maybeZero gTuningW
+        , gyTuningV                  = maybeZero gTuningV
         , gyStartPlayList            = playListList2Yaml gStartPlayList
         , gyRoundEndPlayList         = playListList2Yaml gRoundEndPlayList
         , gyFinishPlayList           = playListList2Yaml gFinishPlayList
@@ -365,13 +437,13 @@ game2gameYaml Game6 {..} = Game6Yaml
         , gyBonusSubgameCount        = gBonusSubgameCount
         , gyBonusRounds              = gBonusRounds
         , gyBonusTarget              = gBonusTarget
-        , gyUnknownI                 = gUnknownI
+        , gyAllNeeded                = gAllNeeded /= 0
         , gyEarlyRounds              = gEarlyRounds
-        , gyUnknownQ                 = gUnknownQ
-        , gyRepeatLastMedia          = gRepeatLastMedia
-        , gyUnknownX                 = gUnknownX
-        , gyUnknownW                 = gUnknownW
-        , gyUnknownV                 = gUnknownV
+        , gyBonusEarlyRounds         = gBonusEarlyRounds
+        , gyRepeatOID                = show gRepeatOID
+        , gyTuningX                  = maybeZero gTuningX
+        , gyTuningW                  = maybeZero gTuningW
+        , gyTuningV                  = maybeZero gTuningV
         , gyStartPlayList            = playListList2Yaml gStartPlayList
         , gyRoundEndPlayList         = playListList2Yaml gRoundEndPlayList
         , gyFinishPlayList           = playListList2Yaml gFinishPlayList
@@ -388,12 +460,12 @@ game2gameYaml Game6 {..} = Game6Yaml
         }
 game2gameYaml Game7 {..} = Game7Yaml
         { gyRounds                   = gRounds
-        , gyUnknownC                 = gUnknownC
+        , gyAllNeeded                = gAllNeeded /= 0
         , gyEarlyRounds              = gEarlyRounds
-        , gyRepeatLastMedia          = gRepeatLastMedia
-        , gyUnknownX                 = gUnknownX
-        , gyUnknownW                 = gUnknownW
-        , gyUnknownV                 = gUnknownV
+        , gyRepeatOID                = show gRepeatOID
+        , gyTuningX                  = maybeZero gTuningX
+        , gyTuningW                  = maybeZero gTuningW
+        , gyTuningV                  = maybeZero gTuningV
         , gyStartPlayList            = playListList2Yaml gStartPlayList
         , gyRoundEndPlayList         = playListList2Yaml gRoundEndPlayList
         , gyFinishPlayList           = playListList2Yaml gFinishPlayList
@@ -406,12 +478,12 @@ game2gameYaml Game7 {..} = Game7Yaml
         }
 game2gameYaml Game8 {..} = Game8Yaml
         { gyRounds                   = gRounds
-        , gyUnknownC                 = gUnknownC
+        , gyAllNeeded                = gAllNeeded /= 0
         , gyEarlyRounds              = gEarlyRounds
-        , gyRepeatLastMedia          = gRepeatLastMedia
-        , gyUnknownX                 = gUnknownX
-        , gyUnknownW                 = gUnknownW
-        , gyUnknownV                 = gUnknownV
+        , gyRepeatOID                = show gRepeatOID
+        , gyTuningX                  = maybeZero gTuningX
+        , gyTuningW                  = maybeZero gTuningW
+        , gyTuningV                  = maybeZero gTuningV
         , gyStartPlayList            = playListList2Yaml gStartPlayList
         , gyRoundEndPlayList         = playListList2Yaml gRoundEndPlayList
         , gyFinishPlayList           = playListList2Yaml gFinishPlayList
@@ -427,12 +499,12 @@ game2gameYaml Game8 {..} = Game8Yaml
         }
 game2gameYaml Game9 {..} = Game9Yaml
         { gyRounds                   = gRounds
-        , gyUnknownC                 = gUnknownC
+        , gyAllNeeded                = gAllNeeded /= 0
         , gyEarlyRounds              = gEarlyRounds
-        , gyRepeatLastMedia          = gRepeatLastMedia
-        , gyUnknownX                 = gUnknownX
-        , gyUnknownW                 = gUnknownW
-        , gyUnknownV                 = gUnknownV
+        , gyRepeatOID                = show gRepeatOID
+        , gyTuningX                  = maybeZero gTuningX
+        , gyTuningW                  = maybeZero gTuningW
+        , gyTuningV                  = maybeZero gTuningV
         , gyStartPlayList            = playListList2Yaml gStartPlayList
         , gyRoundEndPlayList         = playListList2Yaml gRoundEndPlayList
         , gyFinishPlayList           = playListList2Yaml gFinishPlayList
@@ -445,12 +517,12 @@ game2gameYaml Game9 {..} = Game9Yaml
         }
 game2gameYaml Game10 {..} = Game10Yaml
         { gyRounds                   = gRounds
-        , gyUnknownC                 = gUnknownC
+        , gyAllNeeded                = gAllNeeded /= 0
         , gyEarlyRounds              = gEarlyRounds
-        , gyRepeatLastMedia          = gRepeatLastMedia
-        , gyUnknownX                 = gUnknownX
-        , gyUnknownW                 = gUnknownW
-        , gyUnknownV                 = gUnknownV
+        , gyRepeatOID                = show gRepeatOID
+        , gyTuningX                  = maybeZero gTuningX
+        , gyTuningW                  = maybeZero gTuningW
+        , gyTuningV                  = maybeZero gTuningV
         , gyStartPlayList            = playListList2Yaml gStartPlayList
         , gyRoundEndPlayList         = playListList2Yaml gRoundEndPlayList
         , gyFinishPlayList           = playListList2Yaml gFinishPlayList
@@ -463,12 +535,12 @@ game2gameYaml Game10 {..} = Game10Yaml
         }
 game2gameYaml Game16 {..} = Game16Yaml
         { gyRounds                   = gRounds
-        , gyUnknownC                 = gUnknownC
+        , gyAllNeeded                = gAllNeeded /= 0
         , gyEarlyRounds              = gEarlyRounds
-        , gyRepeatLastMedia          = gRepeatLastMedia
-        , gyUnknownX                 = gUnknownX
-        , gyUnknownW                 = gUnknownW
-        , gyUnknownV                 = gUnknownV
+        , gyRepeatOID                = show gRepeatOID
+        , gyTuningX                  = maybeZero gTuningX
+        , gyTuningW                  = maybeZero gTuningW
+        , gyTuningV                  = maybeZero gTuningV
         , gyStartPlayList            = playListList2Yaml gStartPlayList
         , gyRoundEndPlayList         = playListList2Yaml gRoundEndPlayList
         , gyFinishPlayList           = playListList2Yaml gFinishPlayList
@@ -491,49 +563,85 @@ playListListFromYaml (OptArray ws) = traverse
   where listify [] = []
         listify x  = [x]
 
-oidListFromYaml :: OIDListYaml -> [OID]
-oidListFromYaml = map read . words
+-- OID fields may mix plain code numbers and names; names are resolved via the
+-- same code assignment as scripts (and thus appear in the .codes.yaml and on
+-- sheets printed with oid-table/oid-codes).
+oidListFromYaml :: (String -> Word16) -> OIDListYaml -> [OID]
+oidListFromYaml resolve = map go . words
+  where go w = fromMaybe (resolve w) (readMaybe w)
 
-subGameFromYaml :: SubGameYaml -> WithFileNames SubGame
-subGameFromYaml (SubGameYaml u o1 o2 o3 pl) = (\x -> SubGame
-    { sgUnknown = either error id $ parseOneLinePure parsePrettyHex "unknown" u
-    , sgOids1 = oidListFromYaml o1
-    , sgOids2 = oidListFromYaml o2
-    , sgOids3 = oidListFromYaml o3
-    , sgPlaylist = x
-    }) <$> traverse playListListFromYaml pl
+oidFromYaml :: (String -> Word16) -> OIDYaml -> OID
+oidFromYaml resolve s = case oidListFromYaml resolve s of
+    [oid] -> oid
+    _     -> error $ printf "Expected a single OID code or name, got %s" (show s)
+
+-- 0 is the overwhelmingly common value of the unused x/w/v game words; omit it
+-- from the YAML
+maybeZero :: Word16 -> Maybe Word16
+maybeZero 0 = Nothing
+maybeZero n = Just n
+
+-- the names (non-numeric tokens) in an OID list field
+oidNamesOf :: OIDListYaml -> [String]
+oidNamesOf = filter (isNothing . readW16) . words
+  where readW16 = readMaybe :: String -> Maybe Word16
+
+-- all OID names used in a game's OID fields; they take part in the script-code
+-- assignment (see ttYaml2tt)
+gameYamlOidNames :: GameYaml -> [String]
+gameYamlOidNames Game253Yaml = []
+gameYamlOidNames g =
+    oidNamesOf (gyRepeatOID g)
+    ++ concatMap subGameOidNames (gySubgames g)
+    ++ case g of
+        Game8Yaml {}  -> oidNamesOf (gyGameSelectOIDs g)
+        Game16Yaml {} -> oidNamesOf (gyExtraOIDs g)
+        _             -> []
+  where
+    -- positional: the accessor names clash with Types.SubGame's fields
+    subGameOidNames (SubGameYaml _ o1 o2 o3 _ _ _ _ _ _ _ _ _) =
+        oidNamesOf o1 ++ oidNamesOf o2 ++ oidNamesOf o3
+
+subGameFromYaml :: (String -> Word16) -> SubGameYaml -> WithFileNames SubGame
+subGameFromYaml resolve (SubGameYaml u o1 o2 o3 a c w n f h r s u9) = (\pls -> SubGame
+    { sgHeader = either error id $ parseOneLinePure parsePrettyHex "header" u
+    , sgTargetOids = oidListFromYaml resolve o1
+    , sgDecoyOids = oidListFromYaml resolve o2
+    , sgAllOids = oidListFromYaml resolve o3
+    , sgPlaylist = pls
+    }) <$> traverse playListListFromYaml [a, c, w, n, f, h, r, s, fromMaybe (OptArray []) u9]
 
 
-gameYaml2Game :: GameYaml -> WithFileNames Game
-gameYaml2Game CommonGameYaml {..} = pure CommonGame
+gameYaml2Game :: (String -> Word16) -> GameYaml -> WithFileNames Game
+gameYaml2Game resolve CommonGameYaml {..} = pure CommonGame
         <*> pure gyGameType
         <*> pure gyRounds
-        <*> pure gyUnknownC
+        <*> pure (fromIntegral (fromEnum gyAllNeeded))
         <*> pure gyEarlyRounds
-        <*> pure gyRepeatLastMedia
-        <*> pure gyUnknownX
-        <*> pure gyUnknownW
-        <*> pure gyUnknownV
+        <*> pure (oidFromYaml resolve gyRepeatOID)
+        <*> pure (fromMaybe 0 gyTuningX)
+        <*> pure (fromMaybe 0 gyTuningW)
+        <*> pure (fromMaybe 0 gyTuningV)
         <*> playListListFromYaml gyStartPlayList
         <*> playListListFromYaml gyRoundEndPlayList
         <*> playListListFromYaml gyFinishPlayList
         <*> playListListFromYaml gyRoundStartPlayList
         <*> playListListFromYaml gyLaterRoundStartPlayList
-        <*> traverse subGameFromYaml gySubgames
+        <*> traverse (subGameFromYaml resolve) gySubgames
         <*> pure gyTargetScores
         <*> traverse playListListFromYaml gyFinishPlayLists
-gameYaml2Game Game6Yaml {..} = pure Game6
+gameYaml2Game resolve Game6Yaml {..} = pure Game6
         <*> pure gyRounds
         <*> pure gyBonusSubgameCount
         <*> pure gyBonusRounds
         <*> pure gyBonusTarget
-        <*> pure gyUnknownI
+        <*> pure (fromIntegral (fromEnum gyAllNeeded))
         <*> pure gyEarlyRounds
-        <*> pure gyUnknownQ
-        <*> pure gyRepeatLastMedia
-        <*> pure gyUnknownX
-        <*> pure gyUnknownW
-        <*> pure gyUnknownV
+        <*> pure gyBonusEarlyRounds
+        <*> pure (oidFromYaml resolve gyRepeatOID)
+        <*> pure (fromMaybe 0 gyTuningX)
+        <*> pure (fromMaybe 0 gyTuningW)
+        <*> pure (fromMaybe 0 gyTuningV)
         <*> playListListFromYaml gyStartPlayList
         <*> playListListFromYaml gyRoundEndPlayList
         <*> playListListFromYaml gyFinishPlayList
@@ -541,102 +649,102 @@ gameYaml2Game Game6Yaml {..} = pure Game6
         <*> playListListFromYaml gyLaterRoundStartPlayList
         <*> playListListFromYaml gyRoundStartPlayList2
         <*> playListListFromYaml gyLaterRoundStartPlayList2
-        <*> traverse subGameFromYaml gySubgames
+        <*> traverse (subGameFromYaml resolve) gySubgames
         <*> pure gyTargetScores
         <*> pure gyBonusTargetScores
         <*> traverse playListListFromYaml gyFinishPlayLists
         <*> traverse playListListFromYaml gyBonusFinishPlayLists
         <*> pure gyBonusSubgameIds
-gameYaml2Game Game7Yaml {..} = pure Game7
+gameYaml2Game resolve Game7Yaml {..} = pure Game7
         <*> pure gyRounds
-        <*> pure gyUnknownC
+        <*> pure (fromIntegral (fromEnum gyAllNeeded))
         <*> pure gyEarlyRounds
-        <*> pure gyRepeatLastMedia
-        <*> pure gyUnknownX
-        <*> pure gyUnknownW
-        <*> pure gyUnknownV
+        <*> pure (oidFromYaml resolve gyRepeatOID)
+        <*> pure (fromMaybe 0 gyTuningX)
+        <*> pure (fromMaybe 0 gyTuningW)
+        <*> pure (fromMaybe 0 gyTuningV)
         <*> playListListFromYaml gyStartPlayList
         <*> playListListFromYaml gyRoundEndPlayList
         <*> playListListFromYaml gyFinishPlayList
         <*> playListListFromYaml gyRoundStartPlayList
         <*> playListListFromYaml gyLaterRoundStartPlayList
-        <*> traverse subGameFromYaml gySubgames
+        <*> traverse (subGameFromYaml resolve) gySubgames
         <*> pure gyTargetScores
         <*> traverse playListListFromYaml gyFinishPlayLists
         <*> pure gySubgameGroups
-gameYaml2Game Game8Yaml {..} = pure Game8
+gameYaml2Game resolve Game8Yaml {..} = pure Game8
         <*> pure gyRounds
-        <*> pure gyUnknownC
+        <*> pure (fromIntegral (fromEnum gyAllNeeded))
         <*> pure gyEarlyRounds
-        <*> pure gyRepeatLastMedia
-        <*> pure gyUnknownX
-        <*> pure gyUnknownW
-        <*> pure gyUnknownV
+        <*> pure (oidFromYaml resolve gyRepeatOID)
+        <*> pure (fromMaybe 0 gyTuningX)
+        <*> pure (fromMaybe 0 gyTuningW)
+        <*> pure (fromMaybe 0 gyTuningV)
         <*> playListListFromYaml gyStartPlayList
         <*> playListListFromYaml gyRoundEndPlayList
         <*> playListListFromYaml gyFinishPlayList
         <*> playListListFromYaml gyRoundStartPlayList
         <*> playListListFromYaml gyLaterRoundStartPlayList
-        <*> traverse subGameFromYaml gySubgames
+        <*> traverse (subGameFromYaml resolve) gySubgames
         <*> pure gyTargetScores
         <*> traverse playListListFromYaml gyFinishPlayLists
-        <*> pure (oidListFromYaml gyGameSelectOIDs)
+        <*> pure (oidListFromYaml resolve gyGameSelectOIDs)
         <*> pure gyGameSelect
         <*> playListListFromYaml gyGameSelectErrors1
         <*> playListListFromYaml gyGameSelectErrors2
-gameYaml2Game Game9Yaml {..} = pure Game9
+gameYaml2Game resolve Game9Yaml {..} = pure Game9
         <*> pure gyRounds
-        <*> pure gyUnknownC
+        <*> pure (fromIntegral (fromEnum gyAllNeeded))
         <*> pure gyEarlyRounds
-        <*> pure gyRepeatLastMedia
-        <*> pure gyUnknownX
-        <*> pure gyUnknownW
-        <*> pure gyUnknownV
+        <*> pure (oidFromYaml resolve gyRepeatOID)
+        <*> pure (fromMaybe 0 gyTuningX)
+        <*> pure (fromMaybe 0 gyTuningW)
+        <*> pure (fromMaybe 0 gyTuningV)
         <*> playListListFromYaml gyStartPlayList
         <*> playListListFromYaml gyRoundEndPlayList
         <*> playListListFromYaml gyFinishPlayList
         <*> playListListFromYaml gyRoundStartPlayList
         <*> playListListFromYaml gyLaterRoundStartPlayList
-        <*> traverse subGameFromYaml gySubgames
+        <*> traverse (subGameFromYaml resolve) gySubgames
         <*> pure gyTargetScores
         <*> traverse playListListFromYaml gyFinishPlayLists
         <*> traverse playListListFromYaml gyExtraPlayLists
-gameYaml2Game Game10Yaml {..} = pure Game10
+gameYaml2Game resolve Game10Yaml {..} = pure Game10
         <*> pure gyRounds
-        <*> pure gyUnknownC
+        <*> pure (fromIntegral (fromEnum gyAllNeeded))
         <*> pure gyEarlyRounds
-        <*> pure gyRepeatLastMedia
-        <*> pure gyUnknownX
-        <*> pure gyUnknownW
-        <*> pure gyUnknownV
+        <*> pure (oidFromYaml resolve gyRepeatOID)
+        <*> pure (fromMaybe 0 gyTuningX)
+        <*> pure (fromMaybe 0 gyTuningW)
+        <*> pure (fromMaybe 0 gyTuningV)
         <*> playListListFromYaml gyStartPlayList
         <*> playListListFromYaml gyRoundEndPlayList
         <*> playListListFromYaml gyFinishPlayList
         <*> playListListFromYaml gyRoundStartPlayList
         <*> playListListFromYaml gyLaterRoundStartPlayList
-        <*> traverse subGameFromYaml gySubgames
+        <*> traverse (subGameFromYaml resolve) gySubgames
         <*> pure gyTargetScores
         <*> traverse playListListFromYaml gyFinishPlayLists
         <*> traverse playListListFromYaml gyExtraPlayLists
-gameYaml2Game Game16Yaml {..} = pure Game16
+gameYaml2Game resolve Game16Yaml {..} = pure Game16
         <*> pure gyRounds
-        <*> pure gyUnknownC
+        <*> pure (fromIntegral (fromEnum gyAllNeeded))
         <*> pure gyEarlyRounds
-        <*> pure gyRepeatLastMedia
-        <*> pure gyUnknownX
-        <*> pure gyUnknownW
-        <*> pure gyUnknownV
+        <*> pure (oidFromYaml resolve gyRepeatOID)
+        <*> pure (fromMaybe 0 gyTuningX)
+        <*> pure (fromMaybe 0 gyTuningW)
+        <*> pure (fromMaybe 0 gyTuningV)
         <*> playListListFromYaml gyStartPlayList
         <*> playListListFromYaml gyRoundEndPlayList
         <*> playListListFromYaml gyFinishPlayList
         <*> playListListFromYaml gyRoundStartPlayList
         <*> playListListFromYaml gyLaterRoundStartPlayList
-        <*> traverse subGameFromYaml gySubgames
+        <*> traverse (subGameFromYaml resolve) gySubgames
         <*> pure gyTargetScores
         <*> traverse playListListFromYaml gyFinishPlayLists
-        <*> pure (oidListFromYaml gyExtraOIDs)
+        <*> pure (oidListFromYaml resolve gyExtraOIDs)
         <*> traverse playListListFromYaml gyExtraPlayLists
-gameYaml2Game Game253Yaml = pure Game253
+gameYaml2Game resolve Game253Yaml = pure Game253
 
 
 mergeOnlyEqual :: String -> Word16 -> Word16 -> Word16
@@ -687,14 +795,17 @@ codesFor productId = objectCodes
     -- starting at firstObjectCode+objectCodeOffset and then wrapping around.
     objectCodes = [firstObjectCode + objectCodeOffset .. lastObjectCode] ++ [firstObjectCode .. firstObjectCode + objectCodeOffset - 1]
 
-scriptCodes :: [String] -> TipToiCodesYAML -> Word32 -> Either String (String -> Word16, TipToiCodesYAML)
-scriptCodes [] givenCodes productId = Right (error "scriptCodes []", givenCodes)
-scriptCodes codes givenCodes productId
+-- Assigns OID codes to the script names (the first argument, which may instead
+-- be all numbers) and to the extra names (the second argument: names used in
+-- game OID fields; always names, may coexist with numeric scripts).
+scriptCodes :: [String] -> [String] -> TipToiCodesYAML -> Word32 -> Either String (String -> Word16, TipToiCodesYAML)
+scriptCodes [] [] givenCodes productId = Right (error "scriptCodes []", givenCodes)
+scriptCodes codes extraNames givenCodes productId
     | null strs || null nums = Right (lookupCode, allCodes)
     | otherwise = Left "Cannot mix numbers and names in scripts."
   where
     (strs, nums) = partitionEithers $ map f codes
-    newStrs = filter (`M.notMember` ttcScriptCodes givenCodes) strs
+    newStrs = nub $ filter (`M.notMember` ttcScriptCodes givenCodes) (strs ++ extraNames)
     usedCodes = S.fromList $
         maybeToList (ttcReplay givenCodes) ++
         maybeToList (ttcStop givenCodes) ++
@@ -715,7 +826,7 @@ scriptCodes codes givenCodes productId
                 readMaybe str `mplus`
                 M.lookup str (ttcScriptCodes givenCodes) `mplus`
                 M.lookup str newAssignments)
-        | str <- codes
+        | str <- nub (codes ++ extraNames)
         ]
 
     allCodes = TipToiCodesYAML
@@ -795,8 +906,9 @@ ttYaml2tt no_date dir (TipToiYAML {..}) extCodes = do
             , ttcStop = mergeEqualMaybe "stop" (ttcStop extCodes) ttyStop
             }
 
+    let gameOidNames = concatMap gameYamlOidNames (fromMaybe [] ttyGames)
     (scriptMap, assignedCodes) <- either fail return $
-        scriptCodes (M.keys ttyScripts) givenCodes ttyProduct_Id
+        scriptCodes (M.keys ttyScripts) gameOidNames givenCodes ttyProduct_Id
 
     let m = M.mapKeys scriptMap ttyScripts
         first = fst (M.findMin m)
@@ -818,7 +930,7 @@ ttYaml2tt no_date dir (TipToiYAML {..}) extCodes = do
                 )
             ) <*>
             traverse (traverse recordFilename) welcome_names <*>
-            traverse gameYaml2Game (fromMaybe [] ttyGames) <*>
+            traverse (gameYaml2Game scriptMap) (fromMaybe [] ttyGames) <*>
             forAn (maybe [] unOptArray ttyTimer) (\i raw_line ->
                 let d = printf "Timer line %d" i
                     (l,s) = either error id $ parseOneLinePure parseLine d raw_line

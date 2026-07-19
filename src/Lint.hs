@@ -25,6 +25,20 @@ lintTipToi tt segments = do
     forM_ (fromMaybe [] (ttMediaFlags tt)) $ \f ->
         when (f > 1) $ printf "Media flag >1: %d" f
 
+    -- Game-record hypotheses from firmware analysis and a sweep over all
+    -- published GMEs: the find-all flag ("all needed") is boolean, and the
+    -- unused x/w/v words hold 0/0/0 (or 0/111/222 in a few products).
+    forM_ (zip [0::Int ..] (ttGames tt)) $ \(i, g) -> case g of
+        Game253 -> return ()
+        _ -> do
+            when (gAllNeeded g > 1) $
+                printf "Game %d: find-all flag (all needed) is %d, expected 0 or 1\n"
+                    i (gAllNeeded g)
+            let xwv = (gTuningX g, gTuningW g, gTuningV g)
+            unless (xwv `elem` [(0, 0, 0), (0, 111, 222)]) $
+                printf "Game %d: unusual values in the unused words x/w/v: %s\n"
+                    i (show xwv)
+
     let overlapping_segments =
             filter (\((o1,l1,_),(o2,l2,_)) -> o1+l1 > o2) $
             zip segments (tail segments)

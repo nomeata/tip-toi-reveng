@@ -6,6 +6,19 @@
    and `CT` (cancel it, opcode FEFF), and a new top-level YAML field `timer`
    for the timer script, which the pen runs whenever the armed timer fires
    while the pen is idle.
+ * The `games` YAML section was redesigned around the field meanings that
+   firmware analysis revealed, and is now fully documented in the book:
+   the yaml tag is the single game-type discriminator with speaking
+   names (`tag: standard1`/`hintchain`/`memory`/`bonusstage`/
+   `gameselect`/..., plus `tag: standard` with an explicit `gametype`
+   for unidentified type numbers), the find-all-targets flag is a
+   boolean `allneeded`,
+   the subgame playlists are named fields (`announce`, `correct`,
+   `wrong`, ...), OID fields accept names (which participate in code
+   assignment and `oid-table` printing), the dead `tuningx/w/v` words
+   are optional and normally omitted, and `tttool lint` checks the
+   game-record hypotheses.
+ * `testsuite/download.sh` uses the CDN host that still serves GME files.
 
 ## 1.11 (2023-02-11)
 
