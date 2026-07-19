@@ -69,6 +69,10 @@ data Command r
       --   flag of this command -- so it is a plain number here. See GME-Format.md.
     | CancelTimer
       -- ^ opcode 0xFEFF, written CT. Cancels the timer armed by ArmTimer.
+    | DeferredPlay (TVal r)
+      -- ^ opcode 0xFFA1, written Defer(m). Stores m as a media (table) index; when a
+      --   later playlist walk encounters the special playlist entry 0xFFA1, the stored
+      --   index is played. Not seen in GME files so far. See GME-Format.md.
     deriving (Eq, Functor, Foldable)
 
 type PlayList = [Word16]

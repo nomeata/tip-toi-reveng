@@ -1067,6 +1067,11 @@ parseCommands i =
          n <- P.parens lexer $ parseWord16
          (cmds, filenames) <- parseCommands i
          return (Game n : cmds, filenames)
+    , descP "Deferred play action" $
+      do P.lexeme lexer $ P.try (string "Defer")
+         v <- P.parens lexer parseTVal
+         (cmds, filenames) <- parseCommands i
+         return (DeferredPlay v : cmds, filenames)
     ]
 
 

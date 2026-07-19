@@ -262,6 +262,10 @@ lineParser = begin
         , (B.pack [0xFF,0xFE], \_ -> do
             _ <- getTVal
             return CancelTimer)
+        , (B.pack [0xA1,0xFF], \r -> do
+            unless (r == 0) $ error "Non-zero register for DeferredPlay command"
+            v <- getTVal
+            return (DeferredPlay v))
         ] ++
         [ (B.pack (arithOpCode o), \r -> do
             n <- getTVal
