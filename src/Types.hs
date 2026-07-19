@@ -117,16 +117,30 @@ data TipToiFile = TipToiFile
 type PlayListList = [PlayList]
 type GameId = Word16
 
+-- A game record configures one of the firmware's built-in mini-games. gGameType selects
+-- which game (WWW Bauernhof uses types 1..8, one of each). Field meanings from firmware RE:
+--   * gRounds          : total number of rounds (one randomly drawn subgame per round)
+--   * gAllNeeded       : "find all targets" flag: 0 = the first correct tap completes the
+--                        round, 1 = every target OID of the subgame must be found (word
+--                        "c" of the common layout; word "i" of the type-6 layout)
+--   * gEarlyRounds     : round number at which the round announcement switches from the
+--                        round-start to the later-round-start playlists (0 = no
+--                        announcements)
+--   * gRepeatOID       : control OID that replays the current prompt/hint
+--   * gTuningX/W/V     : read-then-discarded by every game handler (dead fields, constant
+--                        0/111/222 in every observed game -- authoring metadata; not
+--                        exposed in the YAML, checked by lint)
+-- See the game table section in GME-Format.md.
 data Game =
     CommonGame
         { gGameType                 :: Word16
         , gRounds                   :: Word16
-        , gUnknownC                 :: Word16
+        , gAllNeeded                :: Word16
         , gEarlyRounds              :: Word16
-        , gRepeatLastMedia          :: Word16
-        , gUnknownX                 :: Word16
-        , gUnknownW                 :: Word16
-        , gUnknownV                 :: Word16
+        , gRepeatOID                :: Word16
+        , gTuningX                  :: Word16
+        , gTuningW                  :: Word16
+        , gTuningV                  :: Word16
         , gStartPlayList            :: PlayListList
         , gRoundEndPlayList         :: PlayListList
         , gFinishPlayList           :: PlayListList
@@ -141,13 +155,13 @@ data Game =
         , gBonusSubgameCount        :: Word16
         , gBonusRounds              :: Word16
         , gBonusTarget              :: Word16
-        , gUnknownI                 :: Word16
+        , gAllNeeded                :: Word16
         , gEarlyRounds              :: Word16
-        , gUnknownQ                 :: Word16
-        , gRepeatLastMedia          :: Word16
-        , gUnknownX                 :: Word16
-        , gUnknownW                 :: Word16
-        , gUnknownV                 :: Word16
+        , gBonusEarlyRounds         :: Word16
+        , gRepeatOID                :: Word16
+        , gTuningX                  :: Word16
+        , gTuningW                  :: Word16
+        , gTuningV                  :: Word16
         , gStartPlayList            :: PlayListList
         , gRoundEndPlayList         :: PlayListList
         , gFinishPlayList           :: PlayListList
@@ -164,12 +178,12 @@ data Game =
         }
     | Game7
         { gRounds                   :: Word16
-        , gUnknownC                 :: Word16
+        , gAllNeeded                :: Word16
         , gEarlyRounds              :: Word16
-        , gRepeatLastMedia          :: Word16
-        , gUnknownX                 :: Word16
-        , gUnknownW                 :: Word16
-        , gUnknownV                 :: Word16
+        , gRepeatOID                :: Word16
+        , gTuningX                  :: Word16
+        , gTuningW                  :: Word16
+        , gTuningV                  :: Word16
         , gStartPlayList            :: PlayListList
         , gRoundEndPlayList         :: PlayListList
         , gFinishPlayList           :: PlayListList
@@ -182,12 +196,12 @@ data Game =
         }
     | Game8
         { gRounds                   :: Word16
-        , gUnknownC                 :: Word16
+        , gAllNeeded                :: Word16
         , gEarlyRounds              :: Word16
-        , gRepeatLastMedia          :: Word16
-        , gUnknownX                 :: Word16
-        , gUnknownW                 :: Word16
-        , gUnknownV                 :: Word16
+        , gRepeatOID                :: Word16
+        , gTuningX                  :: Word16
+        , gTuningW                  :: Word16
+        , gTuningV                  :: Word16
         , gStartPlayList            :: PlayListList
         , gRoundEndPlayList         :: PlayListList
         , gFinishPlayList           :: PlayListList
@@ -203,12 +217,12 @@ data Game =
         }
     | Game9
         { gRounds                   :: Word16
-        , gUnknownC                 :: Word16
+        , gAllNeeded                :: Word16
         , gEarlyRounds              :: Word16
-        , gRepeatLastMedia          :: Word16
-        , gUnknownX                 :: Word16
-        , gUnknownW                 :: Word16
-        , gUnknownV                 :: Word16
+        , gRepeatOID                :: Word16
+        , gTuningX                  :: Word16
+        , gTuningW                  :: Word16
+        , gTuningV                  :: Word16
         , gStartPlayList            :: PlayListList
         , gRoundEndPlayList         :: PlayListList
         , gFinishPlayList           :: PlayListList
@@ -221,12 +235,12 @@ data Game =
         }
     | Game10
         { gRounds                   :: Word16
-        , gUnknownC                 :: Word16
+        , gAllNeeded                :: Word16
         , gEarlyRounds              :: Word16
-        , gRepeatLastMedia          :: Word16
-        , gUnknownX                 :: Word16
-        , gUnknownW                 :: Word16
-        , gUnknownV                 :: Word16
+        , gRepeatOID                :: Word16
+        , gTuningX                  :: Word16
+        , gTuningW                  :: Word16
+        , gTuningV                  :: Word16
         , gStartPlayList            :: PlayListList
         , gRoundEndPlayList         :: PlayListList
         , gFinishPlayList           :: PlayListList
@@ -239,12 +253,12 @@ data Game =
         }
     | Game16
         { gRounds                   :: Word16
-        , gUnknownC                 :: Word16
+        , gAllNeeded                :: Word16
         , gEarlyRounds              :: Word16
-        , gRepeatLastMedia          :: Word16
-        , gUnknownX                 :: Word16
-        , gUnknownW                 :: Word16
-        , gUnknownV                 :: Word16
+        , gRepeatOID                :: Word16
+        , gTuningX                  :: Word16
+        , gTuningW                  :: Word16
+        , gTuningV                  :: Word16
         , gStartPlayList            :: PlayListList
         , gRoundEndPlayList         :: PlayListList
         , gFinishPlayList           :: PlayListList
@@ -272,11 +286,15 @@ gameType Game253 {} = 253
 
 type OID = Word16
 
+-- sgTargetOids are the correct answers, sgDecoyOids are known-wrong answers with
+-- dedicated feedback (decoys), sgAllOids are the subgame's remaining
+-- active OIDs (hint feedback). sgHeader holds ten 16-bit words tuning feedback
+-- selection and wrong-tap limits. See the game table section in GME-Format.md.
 data SubGame = SubGame
-    { sgUnknown :: B.ByteString
-    , sgOids1 :: [OID]
-    , sgOids2 :: [OID]
-    , sgOids3 :: [OID]
+    { sgHeader :: B.ByteString
+    , sgTargetOids :: [OID]
+    , sgDecoyOids :: [OID]
+    , sgAllOids :: [OID]
     , sgPlaylist :: [PlayListList]
     }
     deriving Show

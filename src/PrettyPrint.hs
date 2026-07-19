@@ -156,12 +156,12 @@ ppCommonGame :: Transscript -> Game -> String
 ppCommonGame t g =
     printf (unlines ["  type: %d",
                      "  rounds: %d",
-                     "  unknown (c): %d",
+                     "  all needed (c): %d",
                      "  early rounds: %d",
-                     "  repeat last media OID: %d",
-                     "  unknown (x): %d",
-                     "  unknown (w): %d",
-                     "  unknown (v): %d",
+                     "  repeat OID: %d",
+                     "  unused (x): %d",
+                     "  unused (w): %d",
+                     "  unused (v): %d",
                      "  start play list:               %s",
                      "  round end play list:           %s",
                      "  finish play list:              %s",
@@ -173,10 +173,10 @@ ppCommonGame t g =
                      ])
     (gameType g)
     (gRounds g)
-    (gUnknownC g)
+    (gAllNeeded g)
     (gEarlyRounds g)
-    (gRepeatLastMedia g)
-    (gUnknownX g) (gUnknownW g) (gUnknownV g)
+    (gRepeatOID g)
+    (gTuningX g) (gTuningW g) (gTuningV g)
     (ppPlayListList t (gStartPlayList g))
     (ppPlayListList t (gRoundEndPlayList g))
     (ppPlayListList t (gFinishPlayList g))
@@ -195,13 +195,13 @@ ppGame t (Game6 {..}) =
                      "  rounds: %d",
                      "  bonus rounds: %d",
                      "  rounds target: %d",
-                     "  unknown (i): %d",
+                     "  all needed (i): %d",
                      "  early rounds: %d",
-                     "  unknown (q): %d",
-                     "  repeat last media OID: %d",
-                     "  unknown (x): %d",
-                     "  unknown (w): %d",
-                     "  unknown (v): %d",
+                     "  bonus early rounds (q): %d",
+                     "  repeat OID: %d",
+                     "  unused (x): %d",
+                     "  unused (w): %d",
+                     "  unused (v): %d",
                      "  start play list:               %s",
                      "  round end play list:           %s",
                      "  finish play list:              %s",
@@ -220,11 +220,11 @@ ppGame t (Game6 {..}) =
     gRounds
     gBonusRounds
     gBonusTarget
-    gUnknownI
+    gAllNeeded
     gEarlyRounds
-    gUnknownQ
-    gRepeatLastMedia
-    gUnknownX gUnknownW gUnknownV
+    gBonusEarlyRounds
+    gRepeatOID
+    gTuningX gTuningW gTuningV
     (ppPlayListList t gStartPlayList)
     (ppPlayListList t gRoundEndPlayList)
     (ppPlayListList t gFinishPlayList)
@@ -283,10 +283,10 @@ ppSubGames t = concatMap (uncurry (ppSubGame t)) . zip [0..]
 ppSubGame :: Transscript -> Int -> SubGame -> String
 ppSubGame t n (SubGame u oids1 oids2 oids3 plls) = printf (unlines
     [ "    Subgame %d:"
-    , "      u: %s"
-    , "      oids1: %s"
-    , "      oids2: %s"
-    , "      oids3: %s"
+    , "      header: %s"
+    , "      target oids: %s"
+    , "      decoy oids: %s"
+    , "      all oids: %s"
     , "      playlist: (%d)" , "%s"
     ])
     n

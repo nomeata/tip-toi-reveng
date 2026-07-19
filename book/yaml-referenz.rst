@@ -293,6 +293,260 @@ eigentliche YAML-Datei zu übernehmen.
    die beiden Varianten nicht mischen.
 
 
+``games``
+^^^^^^^^^
+
+Format:
+  Eine Liste von Spiel-Definitionen
+
+Zweck:
+  Konfiguriert die fest in den Stift eingebauten Mini-Spiele (Quiz,
+  „Tippe das Gesuchte an“, Merk-Sequenzen und so weiter).
+
+Die Spiele selbst sind Zustandsautomaten in der *Firmware des Stiftes*; die
+GME-Datei liefert ihnen nur die Daten: welche OID-Codes zum Spiel gehören und
+welche Playlisten in den einzelnen Spielphasen abgespielt werden. Mit
+``games`` kann man diese Daten angeben — das ist deutlich unhandlicher als
+``scripts`` und eher etwas für Experimentierfreudige. Ein guter Startpunkt
+ist, mit ``tttool export`` ein offizielles Produkt mit Spielen (etwa
+„Wieso? Weshalb? Warum? Bauernhof“) in eine YAML-Datei zu exportieren und die
+``games``-Einträge dort zu studieren.
+
+Gestartet wird ein Spiel mit dem Befehl ``G()`` (siehe Befehlsreferenz); die
+Nummer dort ist die Position des Spiels in der ``games``-Liste (das erste
+Spiel ist ``G(0)``). Während eines Spiels reagiert der Stift außerdem auf
+die aufgedruckten Steuersymbole (weiter, wiederholen, stopp, ja, nein).
+
+Ein (stark gekürztes) Beispiel aus einem Export:
+
+.. code:: yaml
+
+  games:
+  - tag: standard1
+    rounds: 5
+    earlyrounds: 4
+    allneeded: false
+    repeatoid: '1409'
+    startplaylist: 430,431,432,433,434
+    roundstartplaylist: 435,436
+    laterroundstartplaylist: 435,437
+    roundendplaylist: []
+    finishplaylist: []
+    targetscores:
+    - 3
+    - 5
+    finishplaylists:
+    - 435,438,439
+    - 435,440,441
+    subgames:
+    - targetoids: 1422 1439
+      decoyoids: ''
+      alloids: 1401 1402 1403 1411 1412 1413
+      header: 00 00 00 00 00 00 01 00 01 00 00 00 00 00 00 00 00 00 00 00
+      announce: 435,442
+      correct: '443'
+      wrong: []
+      notingame: '444'
+      alreadyfound: []
+      hints: '445'
+      roundcomplete: '443'
+      solution: '445'
+
+Die Spielarten (``tag``)
+""""""""""""""""""""""""
+
+Jeder Eintrag in ``games`` gibt mit ``tag`` an, welches der eingebauten
+Spiele läuft:
+
+=================== ==========================================================
+``tag``             Spielart
+=================== ==========================================================
+``standard1``       das übliche Frage-und-Antwort-Spiel: Pro Runde wird ein
+                    Teilspiel gezogen, der Stift stellt dessen Frage, und der
+                    Spieler antwortet durch Antippen
+``hintchain``       wie ``standard1``, aber die ``hints``-Playlisten werden
+                    der Reihe nach abgespielt — eine Kette immer deutlicherer
+                    Hinweise
+``standard3``,      identisch zu ``standard1`` — die Firmware behandelt die
+``standard5``       drei Nummern nachweislich völlig gleich; die Namen gibt
+                    es nur, damit exportierte Dateien ihre Nummer behalten
+``memory``          Merk-Sequenz: Der Stift spielt eine immer länger werdende
+                    Folge von Teilspielen; keine Wertung
+``memorynorepeat``  wie ``memory``, aber ohne Wiederholungen beim Ziehen
+``bonusstage``      Frage-und-Antwort-Spiel mit einer freischaltbaren
+                    Bonusrunde
+``subgamegroups``   die Teilspiele sind in Gruppen eingeteilt; pro Runde wird
+                    eine Gruppe der Reihe nach durchgespielt
+``gameselect``      ein Auswahlmenü: das Antippen eines Menü-Codes startet
+                    ein anderes Spiel aus der ``games``-Liste
+``productspecific`` produktspezifische Sonderlogik in der Stift-Firmware —
+                    für eigene Produkte nicht sinnvoll verwendbar
+``endless``         wie ``standard1``, aber die Runden gehen nie aus
+``subgameselect``   der Spieler wählt das Teilspiel selbst, durch Antippen
+                    von Auswahl-Codes
+``placeholder``     ein leerer Platzhalter-Eintrag (er hält nur die
+                    Nummerierung der Spiele stabil)
+=================== ==========================================================
+
+In der GME-Datei ist die Spielart eine Nummer (``standard1`` = 1,
+``hintchain`` = 2, ``standard3`` = 3, ``memory`` = 4, ``standard5`` = 5,
+``bonusstage`` = 6, ``subgamegroups`` = 7, ``gameselect`` = 8,
+``productspecific`` = 9, ``endless`` = 10, ``subgameselect`` = 16,
+``memorynorepeat`` = 40, ``placeholder`` = 253). Die Firmware kennt darüber hinaus
+eigene Spiel-Varianten mit den Nummern 17 bis 23, über deren Verhalten noch
+nichts bekannt ist. In offiziellen Produkten kommen außerdem Nummern vor,
+die die Firmware gar nicht kennt (vor allem 0 als leerer Dummy-Eintrag,
+vereinzelt 11–15 und 30) — das Antippen eines solchen Spiels tut auf dem
+Stift schlicht nichts; solche Produkte bringen ihr eigenes Binärprogramm in
+der GME-Datei mit, das Spiel-Codes ohnehin vor den eingebauten Spielen
+behandelt. Alle Spiele ohne eigenen ``tag`` schreibt ``tttool export`` als
+``tag: standard`` mit einem expliziten ``gametype``-Feld:
+
+.. code:: yaml
+
+  games:
+  - tag: standard
+    gametype: 30
+    rounds: 5
+    ...
+
+Auch beim Selberschreiben ist ``tag: standard`` mit beliebigem ``gametype``
+erlaubt (das Layout ist das des Frage-und-Antwort-Spiels); bei den benannten
+Spielarten dagegen ist die Art durch den ``tag`` bestimmt, und ein
+zusätzliches ``gametype``-Feld ist ein Fehler.
+
+Die Felder eines Spiels
+"""""""""""""""""""""""
+
+* ``rounds``: die Rundenzahl. Pro Runde wird ein noch nicht gespieltes
+  Teilspiel zufällig gezogen (bei ``memory`` ist ``rounds`` die Zahl der
+  Schritte der Merk-Sequenz).
+* ``allneeded``: ``false`` — der erste richtige Treffer beendet die Runde;
+  ``true`` — es müssen *alle* ``targetoids`` des Teilspiels gefunden werden,
+  mit Rückmeldungen „richtig, weiter so“ und „das hattest du schon“
+  (``alreadyfound``) dazwischen.
+* ``earlyrounds``: die Rundennummer, ab der die Rundenansage von
+  ``roundstartplaylist`` auf ``laterroundstartplaylist`` wechselt
+  (0 = gar keine Rundenansagen).
+* ``repeatoid``: ein Steuer-Code fürs Spiel: Antippen wiederholt die
+  aktuelle Frage bzw. den letzten Hinweis oder die letzte Ansage.
+* ``startplaylist``: Audio beim Spielstart.
+* ``roundstartplaylist`` / ``laterroundstartplaylist``: die Rundenansagen
+  (frühe bzw. spätere Runden, siehe ``earlyrounds``).
+* ``roundendplaylist``: Audio am Ende jeder Runde.
+* ``finishplaylist``: Audio beim Spielende — unabhängig vom Ergebnis, noch
+  vor der Auswertung.
+* ``targetscores`` und ``finishplaylists``: die Auswertung am Spielende.
+  Der Spieler bekommt einen Punkt pro geschaffter Runde; die Punktzahl wird
+  der Reihe nach mit den Schwellwerten in ``targetscores`` verglichen, und
+  die Playliste aus ``finishplaylists`` an der Stelle des ersten passenden
+  Schwellwerts wird abgespielt. So bekommen gute und schlechte Ergebnisse
+  unterschiedliche Schluss-Kommentare. (In der GME-Datei haben beide Listen
+  immer zehn Einträge; ungenutzte sind 0 bzw. leer.)
+* ``subgames``: die Teilspiele, siehe unten.
+* ``tuningx``, ``tuningw``, ``tuningv``: drei Datenfelder, die der Stift
+  liest und wegwirft — sie haben keinerlei Wirkung. Sie sind optional und
+  fehlen normalerweise; ``tttool export`` gibt sie nur aus, wenn sie nicht
+  0 sind (vermutlich Metadaten des Ravensburger-Autorenwerkzeugs).
+
+In allen OID-Feldern (``repeatoid``, ``targetoids``, ``decoyoids``,
+``alloids``, ``gameselectoids``, ``extraoids``) können statt Nummern auch
+sprechende Namen stehen — wie bei ``scripts`` bekommt jeder Name automatisch
+einen Code zugewiesen (nachzulesen in der ``.codes.yaml``), und
+``oid-table`` und ``oid-codes`` drucken sie mit:
+
+.. code:: yaml
+
+    subgames:
+    - targetoids: kuh schwein
+      decoyoids: traktor
+      alloids: ente
+
+Die Teilspiele (``subgames``)
+"""""""""""""""""""""""""""""
+
+Ein Teilspiel ist eine Frage (bzw. eine Aufgabe) mit ihren Antwortfeldern
+und Rückmeldungen. Die drei OID-Listen:
+
+* ``targetoids``: die richtigen Antworten.
+* ``decoyoids``: bekannte falsche Antworten („Köder“), die ihre eigene
+  Rückmeldung (``wrong``) bekommen.
+* ``alloids``: die übrigen zum Spiel gehörenden Felder; Antippen gibt einen
+  Hinweis (``hints``).
+
+Beim Antippen von etwas, das in keiner der drei Listen steht, sagt der
+Stift „das gehört nicht zu diesem Spiel“ (``notingame``).
+
+Die Playlisten der Spielphasen eines Teilspiels:
+
+================== ==========================================================
+Feld               Wird abgespielt …
+================== ==========================================================
+``announce``       als Frage bzw. Ansage des Teilspiels
+``correct``        bei einer richtigen Antwort (``targetoids``)
+``wrong``          bei einer falschen Antwort auf einen ``decoyoids``-Code
+``notingame``      bei einem Code, der nicht zum Spiel gehört
+``alreadyfound``   bei einem schon gefundenen Ziel (nur mit ``allneeded``)
+``hints``          nach sonstigen falschen Versuchen (``alloids``); bei
+                   ``hintchain`` der Reihe nach als Hinweis-Kette
+``roundcomplete``  wenn die Runde geschafft ist
+``solution``       als Auflösung, wenn zu oft daneben getippt wurde (siehe
+                   ``header``)
+``unusedplaylist`` nie — der Stift liest diese neunte Playliste nicht. Das
+                   Feld erscheint nur bei Dateien, die hier trotzdem etwas
+                   stehen haben
+================== ==========================================================
+
+``header`` sind zehn 16-Bit-Worte (als Hex-Bytes, wie im Beispiel oben).
+Der Stift verwendet die ersten fünf:
+
+* Wort 1 steuert, wie die ``correct``-Rückmeldung ausgewählt wird
+  (zufällig, nach der Position des Ziels in ``targetoids``, oder nach der
+  Anzahl schon gefundener Ziele);
+* Wort 2 ist ein Modus „Ziele in der angegebenen Reihenfolge“ — er ist in
+  der Firmware fehlerhaft umgesetzt und sollte 0 bleiben (nur bei
+  ``subgameselect`` funktioniert er sauber);
+* Wort 3 steuert, wie die ``wrong``-Rückmeldung ausgewählt wird (zufällig
+  oder nach Position des Köders);
+* Wort 4 und 5: die maximale Zahl falscher Versuche auf ``decoyoids``
+  bzw. ``alloids``, bevor der Stift die ``solution``-Playliste spielt und
+  die Runde beendet (0 = unbegrenzt);
+* die Worte 6–10 sind ungenutzt.
+
+Am einfachsten übernimmt man den ``header`` aus dem Export eines
+offiziellen Produkts mit dem gewünschten Verhalten.
+
+Die zusätzlichen Felder der Spielarten
+""""""""""""""""""""""""""""""""""""""
+
+``bonusstage`` hat zusätzlich: ``bonustarget`` (die Mindestpunktzahl im
+Hauptteil, die die Bonusrunde freischaltet), ``bonusrounds`` und
+``bonusearlyrounds`` (Rundenzahl und Ansagen-Wechsel der Bonusrunde),
+``roundstartplaylist2``/``laterroundstartplaylist2`` (die Rundenansagen der
+Bonusrunde), ``bonustargetscores``/``bonusfinishplaylists`` (ihre eigene
+Auswertung), sowie ``bonussubgamecount`` und ``bonussubgameids`` — die
+Teilspiele der Bonusrunde stehen mit in ``subgames`` (``bonussubgamecount``
+zählt sie), und ``bonussubgameids`` gibt an, welche in der Bonusrunde
+gespielt werden.
+
+``subgamegroups`` hat zusätzlich das gleichnamige Feld: eine Liste von
+Gruppen, jede Gruppe eine Liste von Teilspiel-Nummern. Pro Runde wird eine
+Gruppe gespielt, ihre Teilspiele in der angegebenen Reihenfolge.
+
+``gameselect`` hat zusätzlich: ``gameselectoids`` (die Menü-Codes) und
+``gameselect`` (für jeden Menü-Code die Nummer des Spiels aus der
+``games``-Liste, das er startet), sowie ``gameselecterrors1`` und
+``gameselecterrors2`` (Playlisten für Fehlbedienung des Menüs).
+
+``subgameselect`` hat zusätzlich: ``extraoids`` — die Auswahl-Codes, mit
+denen der Spieler das jeweilige Teilspiel startet (der erste Code gehört
+zum ersten Teilspiel und so weiter) — und drei ``extraplaylists``.
+
+``endless`` und ``productspecific`` haben zusätzlich ``extraplaylists``
+(bei ``productspecific`` ein großer Playlisten-Vorrat, dessen Bedeutung
+für jedes Produkt fest in der Firmware steckt).
+
+
 ``replay``
 ^^^^^^^^^^^
 

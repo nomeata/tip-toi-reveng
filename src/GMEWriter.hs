@@ -133,13 +133,13 @@ putGame (Game6 {..}) = mdo
     putWord16 gBonusSubgameCount
     putWord16 gBonusRounds
     putWord16 gBonusTarget
-    putWord16 gUnknownI
+    putWord16 gAllNeeded
     putWord16 gEarlyRounds
-    putWord16 gUnknownQ
-    putWord16 gRepeatLastMedia
-    putWord16 gUnknownX
-    putWord16 gUnknownW
-    putWord16 gUnknownV
+    putWord16 gBonusEarlyRounds
+    putWord16 gRepeatOID
+    putWord16 gTuningX
+    putWord16 gTuningW
+    putWord16 gTuningV
     putWord32 spl
     putWord32 repl
     putWord32 fpl
@@ -178,12 +178,12 @@ putGame g = mdo
     putWord16 (gameType g)
     putWord16 (fromIntegral $ length (gSubgames g))
     putWord16 (gRounds g)
-    putWord16 (gUnknownC g)
+    putWord16 (gAllNeeded g)
     putWord16 (gEarlyRounds g)
-    putWord16 (gRepeatLastMedia g)
-    putWord16 (gUnknownX g)
-    putWord16 (gUnknownW g)
-    putWord16 (gUnknownV g)
+    putWord16 (gRepeatOID g)
+    putWord16 (gTuningX g)
+    putWord16 (gTuningW g)
+    putWord16 (gTuningV g)
     putWord32 spl
     putWord32 repl
     putWord32 fpl
@@ -251,10 +251,10 @@ putOidList = putArray putWord16 . map putWord16
 
 putSubGame :: SubGame -> SPut
 putSubGame (SubGame {..}) = mdo
-    putBS sgUnknown
-    putArray putWord16 $ map putWord16 sgOids1
-    putArray putWord16 $ map putWord16 sgOids2
-    putArray putWord16 $ map putWord16 sgOids3
+    putBS sgHeader
+    putArray putWord16 $ map putWord16 sgTargetOids
+    putArray putWord16 $ map putWord16 sgDecoyOids
+    putArray putWord16 $ map putWord16 sgAllOids
     mapM_ putWord32 pll 
     pll  <- mapM (getAddress . putPlayListList) sgPlaylist
     return ()
